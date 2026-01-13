@@ -99,7 +99,7 @@ export async function getActivityLogs() {
     .limit(10);
 }
 
-export async function getTeamForUser() {
+export async function getTeamForUser(id: number) {
   const user = await getUser();
   if (!user) {
     return null;

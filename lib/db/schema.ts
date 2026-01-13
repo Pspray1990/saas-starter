@@ -8,6 +8,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
+// --- TABLES ---
+
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }),
@@ -68,15 +70,37 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+// NEW: Conversion History Table
+export const conversionHistory = pgTable('conversion_history', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  fileName: text('file_name').notNull(),
+  rowCount: integer('row_count').notNull(),
+  format: text('format').notNull(), // 'json' or 'sql'
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// --- RELATIONS ---
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
   invitations: many(invitations),
+  conversionHistory: many(conversionHistory), // Linked to Teams
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+}));
+
+export const conversionHistoryRelations = relations(conversionHistory, ({ one }) => ({
+  team: one(teams, {
+    fields: [conversionHistory.teamId],
+    references: [teams.id],
+  }),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -111,6 +135,15 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
     references: [users.id],
   }),
 }));
+export const feedback = pgTable('feedback', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id),
+  message: text('message').notNull(),
+  type: varchar('type', { length: 50 }).default('general'), // 'bug', 'feature', 'general'
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// --- TYPES ---
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -122,6 +155,9 @@ export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+export type ConversionHistory = typeof conversionHistory.$inferSelect;
+export type NewConversionHistory = typeof conversionHistory.$inferInsert;
+
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;

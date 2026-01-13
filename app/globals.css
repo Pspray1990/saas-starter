@@ -273,3 +273,14 @@
     @apply bg-background text-foreground;
   }
 }
+@keyframes mesh-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.bg-mesh {
+  background: linear-gradient(-45deg, #fff5f0, #ffffff, #fff1eb, #ffffff);
+  background-size: 400% 400%;
+  animation: mesh-gradient 15s ease infinite;
+}

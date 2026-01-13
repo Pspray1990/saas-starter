@@ -1,287 +1,124 @@
-'use client';
-
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardFooter
-} from '@/components/ui/card';
-import { customerPortalAction } from '@/lib/payments/actions';
-import { useActionState } from 'react';
-import { TeamDataWithMembers, User } from '@/lib/db/schema';
-import { removeTeamMember, inviteTeamMember } from '@/app/(login)/actions';
-import useSWR from 'swr';
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
-import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { Loader2, PlusCircle } from 'lucide-react';
+import { Clock, Sparkles } from 'lucide-react';
+import { desc, eq } from 'drizzle-orm';
 
-type ActionState = {
-  error?: string;
-  success?: string;
-};
+import { db } from '@/lib/db/drizzle';
+import { conversionHistory } from '@/lib/db/schema';
+import { getTeamForUser, getUser } from '@/lib/db/queries';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import CSVConverter from './csv-converter';
+import { DashboardAnimations } from '@/components/animations';
 
-function SubscriptionSkeleton() {
-  return (
-    <Card className="mb-8 h-[140px]">
-      <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
+// 1. History List Component (Server-side data fetching)
+async function HistoryList({ teamId }: { teamId: number }) {
+  const history = await db
+    .select()
+    .from(conversionHistory)
+    .where(eq(conversionHistory.teamId, teamId))
+    .orderBy(desc(conversionHistory.createdAt))
+    .limit(5);
 
-function ManageSubscription() {
-  const { data: teamData } = useSWR<TeamDataWithMembers>('/api/team', fetcher);
-
-  return (
-    <Card className="mb-8">
-      <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div className="mb-4 sm:mb-0">
-              <p className="font-medium">
-                Current Plan: {teamData?.planName || 'Free'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {teamData?.subscriptionStatus === 'active'
-                  ? 'Billed monthly'
-                  : teamData?.subscriptionStatus === 'trialing'
-                  ? 'Trial period'
-                  : 'No active subscription'}
-              </p>
-            </div>
-            <form action={customerPortalAction}>
-              <Button type="submit" variant="outline">
-                Manage Subscription
-              </Button>
-            </form>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TeamMembersSkeleton() {
-  return (
-    <Card className="mb-8 h-[140px]">
-      <CardHeader>
-        <CardTitle>Team Members</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="animate-pulse space-y-4 mt-1">
-          <div className="flex items-center space-x-4">
-            <div className="size-8 rounded-full bg-gray-200"></div>
-            <div className="space-y-2">
-              <div className="h-4 w-32 bg-gray-200 rounded"></div>
-              <div className="h-3 w-14 bg-gray-200 rounded"></div>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TeamMembers() {
-  const { data: teamData } = useSWR<TeamDataWithMembers>('/api/team', fetcher);
-  const [removeState, removeAction, isRemovePending] = useActionState<
-    ActionState,
-    FormData
-  >(removeTeamMember, {});
-
-  const getUserDisplayName = (user: Pick<User, 'id' | 'name' | 'email'>) => {
-    return user.name || user.email || 'Unknown User';
-  };
-
-  if (!teamData?.teamMembers?.length) {
+  if (history.length === 0) {
     return (
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Team Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">No team members yet.</p>
-        </CardContent>
-      </Card>
+      <div className="mt-12 p-10 border-2 border-dashed rounded-3xl text-center bg-white/50 backdrop-blur-sm">
+        <div className="bg-gray-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Clock className="w-6 h-6 text-gray-400" />
+        </div>
+        <p className="text-sm font-medium text-gray-600">No conversion history yet</p>
+        <p className="text-xs text-gray-400 mt-1">Your recent exports will appear here automatically.</p>
+      </div>
     );
   }
 
   return (
-    <Card className="mb-8">
-      <CardHeader>
-        <CardTitle>Team Members</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-4">
-          {teamData.teamMembers.map((member, index) => (
-            <li key={member.id} className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Avatar>
-                  {/* 
-                    This app doesn't save profile images, but here
-                    is how you'd show them:
-
-                    <AvatarImage
-                      src={member.user.image || ''}
-                      alt={getUserDisplayName(member.user)}
-                    />
-                  */}
-                  <AvatarFallback>
-                    {getUserDisplayName(member.user)
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium">
-                    {getUserDisplayName(member.user)}
-                  </p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {member.role}
-                  </p>
-                </div>
-              </div>
-              {index > 1 ? (
-                <form action={removeAction}>
-                  <input type="hidden" name="memberId" value={member.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    disabled={isRemovePending}
-                  >
-                    {isRemovePending ? 'Removing...' : 'Remove'}
-                  </Button>
-                </form>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {removeState?.error && (
-          <p className="text-red-500 mt-4">{removeState.error}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function InviteTeamMemberSkeleton() {
-  return (
-    <Card className="h-[260px]">
-      <CardHeader>
-        <CardTitle>Invite Team Member</CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
-
-function InviteTeamMember() {
-  const { data: user } = useSWR<User>('/api/user', fetcher);
-  const isOwner = user?.role === 'owner';
-  const [inviteState, inviteAction, isInvitePending] = useActionState<
-    ActionState,
-    FormData
-  >(inviteTeamMember, {});
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invite Team Member</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={inviteAction} className="space-y-4">
-          <div>
-            <Label htmlFor="email" className="mb-2">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="Enter email"
-              required
-              disabled={!isOwner}
-            />
-          </div>
-          <div>
-            <Label>Role</Label>
-            <RadioGroup
-              defaultValue="member"
-              name="role"
-              className="flex space-x-4"
-              disabled={!isOwner}
-            >
-              <div className="flex items-center space-x-2 mt-2">
-                <RadioGroupItem value="member" id="member" />
-                <Label htmlFor="member">Member</Label>
-              </div>
-              <div className="flex items-center space-x-2 mt-2">
-                <RadioGroupItem value="owner" id="owner" />
-                <Label htmlFor="owner">Owner</Label>
-              </div>
-            </RadioGroup>
-          </div>
-          {inviteState?.error && (
-            <p className="text-red-500">{inviteState.error}</p>
-          )}
-          {inviteState?.success && (
-            <p className="text-green-500">{inviteState.success}</p>
-          )}
-          <Button
-            type="submit"
-            className="bg-orange-500 hover:bg-orange-600 text-white"
-            disabled={isInvitePending || !isOwner}
+    <div className="mt-12">
+      <div className="flex items-center gap-2 mb-6">
+        <div className="p-2 bg-orange-100 rounded-lg">
+          <Clock className="w-4 h-4 text-orange-600" />
+        </div>
+        <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Recent Activity</h2>
+      </div>
+      
+      <div className="grid gap-3">
+        {history.map((item) => (
+          <div 
+            key={item.id} 
+            className="group p-4 flex justify-between items-center bg-white/70 backdrop-blur-md border border-gray-100 rounded-2xl hover:border-orange-200 hover:shadow-md transition-all duration-300"
           >
-            {isInvitePending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Inviting...
-              </>
-            ) : (
-              <>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Invite Member
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      {!isOwner && (
-        <CardFooter>
-          <p className="text-sm text-muted-foreground">
-            You must be a team owner to invite new members.
-          </p>
-        </CardFooter>
-      )}
-    </Card>
+            <div className="flex items-center gap-4">
+               <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-orange-50 transition-colors">
+                  <span className="text-lg">📄</span>
+               </div>
+               <div className="flex flex-col">
+                <span className="font-semibold text-gray-900">{item.fileName}</span>
+                <span className="text-xs text-gray-500 font-medium">{item.rowCount.toLocaleString()} rows</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-6">
+              <span className="hidden sm:block text-[10px] bg-gray-900 text-white px-3 py-1 rounded-full font-black uppercase tracking-tighter">
+                {item.format}
+              </span>
+              <span className="text-xs font-medium text-gray-400">
+                {new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-export default function SettingsPage() {
+// 2. Main Dashboard Page (Server Component)
+export default async function DashboardPage() {
+  const user = await getUser();
+
+  if (!user) {
+    redirect('/sign-in');
+  }
+
+  const team = await getTeamForUser(user.id);
+  
+  if (!team) {
+    return <div>Loading team data...</div>;
+  }
+
+  const isPro = team.subscriptionStatus === 'active' || team.subscriptionStatus === 'trialing';
+
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Team Settings</h1>
-      <Suspense fallback={<SubscriptionSkeleton />}>
-        <ManageSubscription />
-      </Suspense>
-      <Suspense fallback={<TeamMembersSkeleton />}>
-        <TeamMembers />
-      </Suspense>
-      <Suspense fallback={<InviteTeamMemberSkeleton />}>
-        <InviteTeamMember />
-      </Suspense>
+    <section className="relative flex-1 p-4 lg:p-8 max-w-5xl mx-auto z-10">
+      {/* Background Ambience Layer */}
+      <div className="fixed inset-0 -z-10 bg-mesh opacity-60" />
+
+      {/* Hero Header Area */}
+      <div className="flex flex-col mb-10">
+        <div className="flex items-center gap-2 mb-2">
+           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-600 text-white uppercase tracking-widest">Workspace</span>
+           {isPro && (
+             <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest border border-amber-200">
+               <Sparkles className="w-2 h-2" /> Pro Plan
+             </span>
+           )}
+        </div>
+        <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">
+          CSV Converter
+        </h1>
+        <p className="text-base text-gray-500 mt-2 max-w-xl">
+          Upload messy CSVs and instantly export clean data. Your files are processed locally for maximum privacy.
+        </p>
+      </div>
+      
+      {/* Framer Motion Wrapper for smooth entry */}
+      <DashboardAnimations>
+        {/* Note: FileDropOverlay is now inside CSVConverter to avoid serialization errors */}
+        <CSVConverter isPro={isPro} />
+        
+        <Suspense fallback={<div className="mt-12 animate-pulse h-40 bg-gray-200/50 rounded-3xl" />}>
+          <HistoryList teamId={team.id} />
+        </Suspense>
+      </DashboardAnimations>
     </section>
   );
 }

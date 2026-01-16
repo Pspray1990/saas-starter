@@ -36,6 +36,36 @@ export async function getUser() {
   return user[0];
 }
 
+// --- NEW FUNCTION: getTeamMembers ---
+// This satisfies the import in your TeamPage
+export async function getTeamMembers(userId: number) {
+  // 1. Find the team associated with this user
+  const userTeam = await db
+    .select({ teamId: teamMembers.teamId })
+    .from(teamMembers)
+    .where(eq(teamMembers.userId, userId))
+    .limit(1);
+
+  if (userTeam.length === 0) return [];
+
+  const teamId = userTeam[0].teamId;
+
+  // 2. Return all members of that team with their user details
+  return await db
+    .select({
+      id: teamMembers.id,
+      role: teamMembers.role,
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(eq(teamMembers.teamId, teamId));
+}
+
 export async function getTeamByStripeCustomerId(customerId: string) {
   const result = await db
     .select()
@@ -99,14 +129,10 @@ export async function getActivityLogs() {
     .limit(10);
 }
 
-export async function getTeamForUser(id: number) {
-  const user = await getUser();
-  if (!user) {
-    return null;
-  }
-
+export async function getTeamForUser(userId: number) {
+  // Using userId directly instead of calling getUser() inside to avoid redundant cookie parsing
   const result = await db.query.teamMembers.findFirst({
-    where: eq(teamMembers.userId, user.id),
+    where: eq(teamMembers.userId, userId),
     with: {
       team: {
         with: {
